@@ -1,0 +1,38 @@
+name: Frontend Build
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'app_web/**'
+      - '.github/workflows/frontend-build.yml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'app_web/**'
+      - '.github/workflows/frontend-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Install Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Install dependencies
+      working-directory: ./app_web
+      run: bun install
+
+    - name: Run typecheck
+      working-directory: ./app_web
+      run: bun run typecheck
+
+    - name: Build application
+      working-directory: ./app_web
+      run: bun run build
