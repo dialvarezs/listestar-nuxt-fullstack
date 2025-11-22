@@ -17,7 +17,7 @@ uv run litestar run --reload
 ### Database Operations
 ```bash
 just db <args>        # Alembic operations via Litestar CLI
-uv run litestar database upgrade head
+uv run litestar database upgrade --no-prompt
 uv run litestar database revision --autogenerate -m "description"
 ```
 
