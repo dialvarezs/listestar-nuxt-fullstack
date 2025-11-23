@@ -7,6 +7,7 @@ for the Litestar application using async SQLAlchemy support.
 
 from advanced_alchemy.config import AsyncSessionConfig
 from advanced_alchemy.extensions.litestar import (
+    AlembicAsyncConfig,
     EngineConfig,
     SQLAlchemyAsyncConfig,
     SQLAlchemyPlugin,
@@ -33,6 +34,9 @@ def create_sqlalchemy_config(app_settings: Settings | None = None) -> SQLAlchemy
         engine_config=EngineConfig(echo=False),
         session_config=AsyncSessionConfig(expire_on_commit=False),
         before_send_handler="autocommit",
+        alembic_config=AlembicAsyncConfig(
+            toml_file="pyproject.toml",
+        ),
     )
 
 
