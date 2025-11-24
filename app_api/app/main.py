@@ -69,7 +69,7 @@ def create_app(
             ),
             enable_middleware_logging=app_settings.debug,
             middleware_logging_config=LoggingMiddlewareConfig(
-                response_log_fields=["status_code", "cookies", "headers"],
+                response_log_fields=("status_code", "cookies", "headers"),
             ),
         )
     )
