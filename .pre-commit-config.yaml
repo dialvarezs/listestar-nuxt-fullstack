@@ -21,4 +21,7 @@ repos:
     hooks:
       - id: eslint
         files: ^app_web/
-        args: [ --config app_web/.eslint.config.mjs app_web --fix ]
+        args:
+          - --config
+          - app_web/eslint.config.mjs
+          - --fix
