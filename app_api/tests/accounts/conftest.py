@@ -10,6 +10,7 @@ from typing import Any
 import pytest_asyncio
 from litestar.testing.client import AsyncTestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.api.accounts.users.services import password_hasher
 from app.models.accounts import Permission, Role, User
@@ -149,7 +150,7 @@ async def client_with_roles(
     client: AsyncTestClient, session_database: dict[str, str]
 ) -> AsyncIterator[AsyncTestClient]:
     """Create a test client with pre-populated roles."""
-    engine = create_async_engine(session_database["url"], echo=False)
+    engine = create_async_engine(session_database["url"], echo=False, poolclass=NullPool)
     try:
         await _populate_roles(engine)
         yield client
@@ -162,7 +163,7 @@ async def client_with_accounts(
     client: AsyncTestClient, session_database: dict[str, str]
 ) -> AsyncIterator[AsyncTestClient]:
     """Create a test client with pre-populated users and roles."""
-    engine = create_async_engine(session_database["url"], echo=False)
+    engine = create_async_engine(session_database["url"], echo=False, poolclass=NullPool)
     try:
         await _populate_accounts(engine)
         yield client
@@ -175,7 +176,7 @@ async def authenticated_client(
     client: AsyncTestClient, session_database: dict[str, str]
 ) -> AsyncIterator[AsyncTestClient]:
     """Create a test client with pre-populated users and roles, and authenticate a user."""
-    engine = create_async_engine(session_database["url"], echo=False)
+    engine = create_async_engine(session_database["url"], echo=False, poolclass=NullPool)
     try:
         await _populate_accounts(engine)
 
@@ -204,7 +205,7 @@ async def client_with_permissions(
 ) -> AsyncIterator[AsyncTestClient]:
     """Create a test client with pre-populated users, roles, and permissions."""
 
-    engine = create_async_engine(session_database["url"], echo=False)
+    engine = create_async_engine(session_database["url"], echo=False, poolclass=NullPool)
     try:
         await _populate_permissions(engine)
         yield authenticated_client

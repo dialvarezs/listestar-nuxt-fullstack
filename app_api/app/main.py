@@ -19,13 +19,15 @@ from litestar.plugins.structlog import StructlogConfig, StructlogPlugin
 from app.api.accounts.auth.security import create_oauth2_auth
 from app.api.accounts.router import accounts_router
 from app.config import Settings, settings
-from app.db import create_sqlalchemy_config, create_sqlalchemy_plugin
+from app.db import create_sqlalchemy_plugin
 
 
 def create_app(
     app_settings: Settings | None = None,
     title: str = "PM API",
     enable_structlog: bool = True,
+    pool_size: int | None = None,
+    max_overflow: int | None = None,
 ) -> Litestar:
     """
     Create and configure a Litestar application instance.
@@ -38,6 +40,8 @@ def create_app(
         app_settings: Settings instance to use. If None, uses global settings.
         title: Title for the OpenAPI documentation
         enable_structlog: Whether to enable structlog logging plugin
+        pool_size: Database connection pool size. If None, uses SQLAlchemy default.
+        max_overflow: Database connection pool max overflow. If None, uses SQLAlchemy default.
 
     Returns:
         Configured Litestar application instance
@@ -45,8 +49,10 @@ def create_app(
     if app_settings is None:
         app_settings = settings
 
-    app_sqlalchemy_plugin = create_sqlalchemy_plugin(app_settings)
-    app_sqlalchemy_config = create_sqlalchemy_config(app_settings)
+    app_sqlalchemy_plugin = create_sqlalchemy_plugin(
+        app_settings, pool_size=pool_size, max_overflow=max_overflow
+    )
+    app_sqlalchemy_config = app_sqlalchemy_plugin.config[0]
 
     openapi_config = OpenAPIConfig(
         title=title,
@@ -63,7 +69,7 @@ def create_app(
             ),
             enable_middleware_logging=app_settings.debug,
             middleware_logging_config=LoggingMiddlewareConfig(
-                response_log_fields=["status_code", "cookies", "headers"],
+                response_log_fields=("status_code", "cookies", "headers"),
             ),
         )
     )

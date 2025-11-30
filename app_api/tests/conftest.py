@@ -6,6 +6,7 @@ from litestar.testing.client import AsyncTestClient
 from pytest_databases.docker.postgres import PostgresService
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.config import Settings
 
@@ -28,7 +29,9 @@ async def session_database(
     test_db_url = f"{base_url}/{db_name}"
 
     # Connect to default postgres db to create our session test database
-    default_engine = create_async_engine(f"{base_url}/postgres", echo=False, isolation_level="AUTOCOMMIT")
+    default_engine = create_async_engine(
+        f"{base_url}/postgres", echo=False, isolation_level="AUTOCOMMIT", poolclass=NullPool
+    )
     try:
         async with default_engine.connect() as conn:
             await conn.execute(text(f"CREATE DATABASE {db_name}"))
@@ -36,43 +39,64 @@ async def session_database(
         await default_engine.dispose()
 
     # Create database tables
-    engine = create_async_engine(test_db_url, echo=False)
+    engine = create_async_engine(test_db_url, echo=False, poolclass=NullPool)
     try:
         async with engine.begin() as conn:
             assert sqlalchemy_config.metadata is not None
             await conn.run_sync(sqlalchemy_config.metadata.create_all)
-
-        # Yield the database info for the session
-        yield {"url": test_db_url, "db_name": db_name, "base_url": base_url}
-
     finally:
         await engine.dispose()
 
-        # Drop the session test database
-        cleanup_engine = create_async_engine(f"{base_url}/postgres", echo=False, isolation_level="AUTOCOMMIT")
-        try:
-            async with cleanup_engine.connect() as conn:
-                # Terminate connections to the test database first
-                await conn.execute(
-                    text(f"""
-                    SELECT pg_terminate_backend(pid)
-                    FROM pg_stat_activity
-                    WHERE datname = '{db_name}' AND pid <> pg_backend_pid()
-                """)
-                )
-                await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
-        finally:
-            await cleanup_engine.dispose()
+    # Yield the database info for the session
+    yield {"url": test_db_url, "db_name": db_name, "base_url": base_url}
+
+    # Drop the session test database
+    cleanup_engine = create_async_engine(
+        f"{base_url}/postgres", echo=False, isolation_level="AUTOCOMMIT", poolclass=NullPool
+    )
+    try:
+        async with cleanup_engine.connect() as conn:
+            # Terminate connections to the test database first
+            await conn.execute(
+                text(f"""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = '{db_name}' AND pid <> pg_backend_pid()
+            """)
+            )
+            await conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
+    finally:
+        await cleanup_engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_database(session_database: dict[str, str]) -> AsyncIterator[None]:
-    """Clean database between tests by truncating all tables."""
+    """
+    Clean database between tests by truncating all tables.
+
+    Uses two engines to avoid connection leaks:
+    1. terminator_engine: Kills orphaned connections to test DB (connects to postgres db)
+    2. clean_engine: Performs TRUNCATE operations (connects to test db)
+    """
     from app.db import sqlalchemy_config
 
-    clean_engine = create_async_engine(session_database["url"], echo=False)
+    terminator_engine = create_async_engine(
+        f"{session_database['base_url']}/postgres",
+        echo=False,
+        isolation_level="AUTOCOMMIT",
+        poolclass=NullPool,
+    )
+    clean_engine = create_async_engine(session_database["url"], echo=False, poolclass=NullPool)
 
     try:
+        # Terminate stray connections from previous tests to prevent connection pool exhaustion
+        async with terminator_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{session_database['db_name']}' AND pid <> pg_backend_pid()"
+                )
+            )
+
         # Clean tables before the test
         async with clean_engine.begin() as conn:
             assert sqlalchemy_config.metadata is not None
@@ -83,6 +107,7 @@ async def clean_database(session_database: dict[str, str]) -> AsyncIterator[None
 
     finally:
         await clean_engine.dispose()
+        await terminator_engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -123,6 +148,8 @@ async def client(session_database: dict[str, str], clean_database: None) -> Asyn
         app_settings=test_settings,
         title="Test PM API",
         enable_structlog=False,
+        pool_size=1,
+        max_overflow=0,
     )
 
     async with AsyncTestClient(app=test_app) as test_client:
