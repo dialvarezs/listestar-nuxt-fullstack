@@ -31,5 +31,5 @@ jobs:
           restore-keys: |
             pre-commit-
 
-      - name: Set up and run Prek
+      - name: Run Prek
         uses: j178/prek-action@v1
